@@ -1,0 +1,21 @@
+﻿Build started 1/12/2015 5:33:28 PM.
+     1>Project "C:\Users\Ve\Documents\MS\thesis\ColorMRFdemo\windows\colormrfdemo.vcxproj" on node 2 (Build target(s)).
+     1>ClCompile:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\CL.exe /c /I"C:\wxWidgets-2.8.12\include" /I"C:\wxWidgets-2.8.12\include\msvc" /ZI /nologo /W3 /WX- /Od /Oy- /D WIN32 /D _DEBUG /D _WINDOWS /D __WXMSW__ /D WINVER=0x0400 /D __WXDEBUG__ /D _VC80_UPGRADE=0x0710 /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Fo".\Debug/" /Fd".\Debug/vc120.pdb" /Gd /TP /analyze- /errorReport:prompt ..\src\CKProcessTimeCounter.cpp ..\src\colormrf.cpp ..\src\mersenne.cpp
+         CKProcessTimeCounter.cpp
+     1>c:\users\ve\documents\ms\thesis\colormrfdemo\src\ckprocesstimecounter.cpp(136): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+                 c:\program files (x86)\microsoft visual studio 12.0\vc\include\string.h(112) : see declaration of 'strcpy'
+         colormrf.cpp
+         mersenne.cpp
+         Generating Code...
+       Link:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"Debug/colormrfdemo.exe" /INCREMENTAL:NO /NOLOGO /LIBPATH:"C:\wxWidgets-2.8.12\lib\vc_lib" /LIBPATH:"C:\wxWidgets-2.8.12\lib" odbc32.lib odbccp32.lib comctl32.lib rpcrt4.lib winmm.lib wsock32.lib wxbase28d.lib wxjpegd.lib wxmsw28d_core.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:".\Debug/mrf.pdb" /SUBSYSTEM:WINDOWS /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\Debug\ColorMRFdemo.lib" /MACHINE:X86 /SAFESEH .\Debug/CKProcessTimeCounter.obj
+         .\Debug/colormrf.obj
+         .\Debug/mersenne.obj
+     1>CKProcessTimeCounter.obj : warning LNK4075: ignoring '/EDITANDCONTINUE' due to '/OPT:LBR' specification
+         colormrfdemo.vcxproj -> C:\Users\Ve\Documents\MS\thesis\ColorMRFdemo\windows\.\Debug\ColorMRFdemo.exe
+     1>Done Building Project "C:\Users\Ve\Documents\MS\thesis\ColorMRFdemo\windows\colormrfdemo.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:04.43

@@ -51,6 +51,9 @@ static char rcsid_colormrf_cpp[] = "$Id: colormrf.cpp,v 1.1 2009/01/09 20:48:09 
 #include <sstream>
 #include <cstdlib> 
 #include <vector>
+#include <queue>
+#include <unordered_map>
+
 
 /* Random number generators
 */
@@ -196,31 +199,43 @@ private:
 	void siteSearch(int n, int bestSites, int siteSize);
 
 	// genetic algorithm
-	struct Chromosome {
+	struct Pixel {
 		int x;
 		int y;
-		int val;
-		double fitness;
 	};
+	struct Chromosome {
+		std::vector<Pixel> elements;
+		double energy;
 
+		bool operator<(const Chromosome &rhs) const {
+			return energy < rhs.energy;
+		};
+		
+	};
+	template <class Q>
+	void clearQueue(Q & q) {
+		q = Q();
+	}
+	
 	int **solution; //best solution
 
-	Chromosome **chromosomes; //potential cluster centers
-	Chromosome **reordered_chromosomes; //storage for chromosomes during reordering
-	Chromosome **mutated_chromosomes; //mutated chromosomes
-	std::vector<double> chromosome_energy;
+	std::vector<Chromosome> chromosomes; //potential cluster centers
+	std::priority_queue<Chromosome> ordered_chromosomes; //chromosomes ordered by energy
+	std::unordered_map<int, std::vector<Pixel> > pixel_map;
+
 	int no_chromosomes = 20;
-	double E_max = 0;
-	double E_min = 0;
+	double E_max = -1;
+	double E_min = INFINITY;
 	double c_prob = .7;
 	double m_prob = .05;
 
+	void ImageOperations::mapPixels();
 	void ImageOperations::makeChromosomes();
-	void ImageOperations::evaluate_fitness(int siteSize, bool lastIt);
+	void ImageOperations::evaluate_fitness(int siteSize);
 	void ImageOperations::crossover();
 	void ImageOperations::mutation();
-	void ImageOperations::formNewPopulation();
 	void ImageOperations::printChromosomes();
+	void ImageOperations::arrayify();
 };
 
 
@@ -466,7 +481,7 @@ void MyFrame::OnPaint(wxPaintEvent& event)
 	str.Printf("Number of classes:");
 	pDC.DrawText(str, 20, 525);
 
-	str.Printf("ß = ");
+	str.Printf("ÃŸ = ");
 	pDC.DrawText(str, 43, 560);
 	str.Printf("t = ");
 	pDC.DrawText(str, 181, 560);
@@ -720,8 +735,8 @@ void MyFrame::OnDoit(wxCommandEvent& event)
 
 	if ((beta = tbeta->GetValue()).Length() == 0)
 	{
-		wxLogWarning("ß value missing!", "Warning!");
-		//     wxMessageBox("ß value missing", "Error");
+		wxLogWarning("ÃŸ value missing!", "Warning!");
+		//     wxMessageBox("ÃŸ value missing", "Error");
 		return;
 	}
 	else	// TODO: check value!
@@ -1934,155 +1949,97 @@ void ImageOperations::siteSearch(int n, int bestSites, int siteSize) {
 	}
 }
 
-/*
-
-create initial population
-keep track of ALL chromosomes -- old and new in the chromosome variable
-the first [0,x] will be the unmutated chromosomes
-the next [x,2*x] will be the mutated chromosomes
-
-crossover and mutate the initial population -- only [0,x]
-evaulate fitness of the entire chromosome variable (including mutated chromosomes)
-pick solution
-pick 25 chromosomes from [0,x] and 25 chromosomes from [0,2*x] for the new population
-current challenge -- how to clear/reorder the 2d array?
-
-address problem with last iteration
-
-*/
 
 void ImageOperations::GeneticAlgorithm() {
-	InitOutImage();
-	//debug
-	//std::cout << CalculateEnergy() << std::endl;
-
-	makeChromosomes();
 
 	int num_it = 0; //iteration counter
 	int max_it = numberOfIterations; //max number of iterations
 	int siteSize = 5; //size of square radius
-	bool lastIt = false; //checks for last iteration
-
 	solution = new int*[height]; //stores solution
+
+	InitOutImage();
 	std::copy(classes, classes + height, solution); //intial solution is the current segemntation
+	mapPixels();
+	makeChromosomes();
+	
 
 	do
 	{
-		if (num_it > 0) { //(num_it + 1) == max_it) {
-			lastIt = true;
-		}
-
-		evaluate_fitness(siteSize, lastIt); //sends square radius and whether this is last iteration
+		evaluate_fitness(siteSize); //sends square radius and whether this is last iteration
+		mapPixels();
 		crossover();
 		mutation();
 
 		num_it++;
 		K++;
 
-		//uncomment this to use an ordered population in future iterations
-		//formNewPopulation();
 
-		std::copy(solution, solution + height, classes); //save the current solution
-		chromosome_energy.clear();
+		/*std::string str = std::to_string(ordered_chromosomes.top().energy);
+		std::stringstream sstr;
+		sstr << str;
+		LPCSTR ptr1 = sstr.str().c_str();
+		OutputDebugString(ptr1);
+		OutputDebugStringW(L"\n");*/
+
 		CreateOutput(); //display current labeling
 	} while (num_it < max_it);
 
-	//delete solution;
+}
+
+void ImageOperations::mapPixels() {
+
+	pixel_map.clear();
+		
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			Pixel item;
+			item.x = i;
+			item.y = j;
+
+			if (pixel_map.count(classes[i][j]) == 0) {
+				std::vector<Pixel> pixels;
+				pixels.push_back(item);
+				pixel_map[classes[i][j]] = pixels;
+			}
+			else {
+				pixel_map[classes[i][j]].push_back(item);
+			}
+		}
+	}
+
 }
 
 void ImageOperations::makeChromosomes() {
 
-	int i, j, rndx, rndy, it;
-	//chromosomes = new Chromosome*[no_chromosomes];
-	chromosomes = new Chromosome*[no_chromosomes * 2]; //a 1D array of chromosomes -- height is equal to number of chromosomes + accounts for mutated chromosomes
+	for (int i = 0; i < no_chromosomes; i++) {
 
-	for (i = 0; i < (no_chromosomes * 2); i++) {
-		chromosomes[i] = new Chromosome[no_regions]; //reserves n columns in each already-defined row where n = number of classes
+		Chromosome item;
+		item.energy = INFINITY;
 
-		for (j = 0; j < no_regions; j++) { //in each spot in the array, put in a blank chromosome
-			Chromosome null;
-			null.val = -1;
-			chromosomes[i][j] = null;
+		for (int i = 0; i < no_regions; i++) { //because of this, pixels are always inserted in class numeric order
+			int index = rand() % pixel_map[i].size();
+			item.elements.push_back(pixel_map[i][index]);
 		}
-	}
 
-	//only fills in potential chromsome clusters for clearly-defined chromosomes -- NOT mutated chromosomses
-	for (i = 0; i < no_chromosomes; i++) { //continue this loop for each row
-		it = no_regions;
-		do {
+		chromosomes.push_back(item);
 
-
-			rndx = rand() % height;
-			rndy = rand() % width;
-
-			int curr_label = classes[rndx][rndy]; //grabs random pixel label
-
-			if (chromosomes[i][curr_label].val == -1) { //if this row's column is empty, then define this chromosome
-				Chromosome temp;
-				temp.x = rndx;
-				temp.y = rndy;
-				temp.val = classes[rndx][rndy];
-
-				chromosomes[i][curr_label - 1] = temp;
-				it--; //one less class to define in this current row of chromosomes
-			}
-		} while (it != 0); //continue this process until all the columns of this current row is filled
 	}
 }
 
-void ImageOperations::formNewPopulation() {
-
-	int i, j, curr_min_index;
-	double curr_min;
-
-	//use chromsome energy to find lowest energy points and their index in the array
-	reordered_chromosomes = new Chromosome*[no_chromosomes * 2];
-
-	for (i = 0; i < (no_chromosomes * 2); i++) {
-		reordered_chromosomes[i] = new Chromosome[no_regions]; //reserves n columns in each already-defined row where n = number of classes
-
-		for (j = 0; j < no_regions; j++) { //in each spot in the array, put in a blank chromosome
-			Chromosome null;
-			null.val = -1;
-			reordered_chromosomes[i][j] = null;
-		}
-	}
-
-
-	//find the smallest energy in chromosome energy
-	for (i = 0; i < no_chromosomes; i++) {
-
-		curr_min = chromosome_energy[0];
-		curr_min_index = 0;
-
-		for (int j = 0; j < chromosome_energy.size(); j++) {
-			if (chromosome_energy[j] < curr_min)  {
-				curr_min = chromosome_energy[j];
-				curr_min_index = j;
-			}
-		}
-
-		reordered_chromosomes[i] = chromosomes[curr_min_index];
-	}
-
-	chromosomes = reordered_chromosomes;
-
-}
-
-void ImageOperations::evaluate_fitness(int siteSize, bool firstIt) {
+void ImageOperations::evaluate_fitness(int siteSize) {
 
 	int** classes_clone = new int*[height];
-
 	std::copy(classes, classes + height, classes_clone); //create a copy of the current segmented image
+	clearQueue(ordered_chromosomes);
 
-	for (int i = 0; i < no_chromosomes * 2; i++) { //for each row of chromosomes
+	for (int i = 0; i < no_chromosomes; i++) { //for each row of chromosomes
 
 		std::copy(classes_clone, classes_clone + height, classes); //start with the original segmented image
 
 		for (int j = 0; j < no_regions; j++) { //for each column in the current row
 
-			int x = chromosomes[i][j].x;
-			int y = chromosomes[i][j].y;
+			int x = chromosomes[i].elements[j].x;
+			int y = chromosomes[i].elements[j].y;
 
 			int startX, endX, startY, endY;
 
@@ -2133,53 +2090,44 @@ void ImageOperations::evaluate_fitness(int siteSize, bool firstIt) {
 			}
 		}
 
+
 		//calculate energy for the newly segmented image
-		chromosome_energy.push_back(CalculateEnergy());
+		chromosomes[i].energy = CalculateEnergy();
 
-		if (firstIt) { //i == 0) {
-			//if this is the first iteration, the max and min values will be equal to the first energy calculation
-			E_max = E_min = CalculateEnergy();
-		}
+		//store current chromosome in min_heap
+		ordered_chromosomes.push(chromosomes[i]);
 
-		if (/*(i != 0)*/ !firstIt && CalculateEnergy() > E_max) {
-			//if this is not the first iteration and the current energy is greater than the max energy, store this value
-			E_max = CalculateEnergy();
-		}
-
-		if (!firstIt && CalculateEnergy() < E_min) {
-			//if the current energy calculation is less than the min value, store this value
+		if (CalculateEnergy() < E_min) {
+			//lowest energy thus far
 			E_min = CalculateEnergy();
-
 			//store this segmented image as the solution as well
 			std::copy(classes, classes + height, solution);
 		}
+
+		if (CalculateEnergy() > E_max) {
+			E_max = CalculateEnergy();
+		}
+
 	}
 
-	//put the original segmented image back in the classes variable 
-	std::copy(classes_clone, classes_clone + height, classes);
-	//delete classes_clone;
+	//put the solution in the classes variable 
+	std::copy(solution, solution + height, classes); //save the current solution
+	delete classes_clone;
 }
 
 void ImageOperations::crossover() {
 	int half = no_regions / 2; //if width is odd, will round down due to int division
 	int i, j;
-	double temp;
 
 	//single point crossover
 	for (i = 0; i < no_chromosomes; i++) { //for each row
 		for (j = half; j < no_regions; j++) {
-			if ((chromosome_energy[i] / E_max) > c_prob) { //if the energy / maximum energy > crossover probability
+			if ((chromosomes[i].energy / E_max) > c_prob) { //if the energy / maximum energy > crossover probability
 				if (i == (no_chromosomes - 1)) {
-					std::swap(chromosomes[i][j], chromosomes[0][j]);
-					temp = chromosome_energy[i];
-					chromosome_energy[i] = chromosome_energy[0];
-					chromosome_energy[0] = temp;
+					std::swap(chromosomes[i].elements[j], chromosomes[0].elements[j]);
 				}
 				else {
-					std::swap(chromosomes[i][j], chromosomes[i + 1][j]);
-					temp = chromosome_energy[i];
-					chromosome_energy[i] = chromosome_energy[i + 1];
-					chromosome_energy[i + 1] = temp;
+					std::swap(chromosomes[i].elements[j], chromosomes[i + 1].elements[j]);
 				}
 			}
 		}
@@ -2195,42 +2143,22 @@ chromosomes variable has 100 spaces available
 
 void ImageOperations::mutation() {
 
-	int i, j, rndx, rndy;
-	int rnd_class, curr_label;
-
-	/*
-	copy the current chromosomes
-	mutate the batch
-	evaluate fitness -- choose 25
-	*/
-
-	//overload the copy function?
-	//std::copy(chromosomes, no_chromosomes + height, mutated_chromosomes); //create a copy of the generated chromosomes
+	int i, rnd_class, rnd_loc;
+	Pixel rnd;
 
 	//NO MORE MUTATION PROBABILITY!!!!
 	for (i = 0; i < no_chromosomes; i++) { //for each row
-		//if ((chromosome_energy[i] / E_max) < m_prob) { //if the energy/maximum energy < mutation probability...
+		if ((chromosomes[i].energy / E_max) < m_prob) { //if the energy/maximum energy < mutation probability...
 
-		//copies over the current unmutated chromosome row to the mutated chromosome section
-		for (j = 0; j < no_regions; j++) {
-			chromosomes[i + no_chromosomes][j].x = chromosomes[i][j].x;
-			chromosomes[i + no_chromosomes][j].y = chromosomes[i][j].y;
+			rnd_class = rand() % no_regions; //randomly choose a class
+
+			rnd_loc = rand() % pixel_map[rnd_class].size();
+			rnd = pixel_map[rnd_class][rnd_loc]; //picks a random pixel from pixel map 
+
+			chromosomes[i].elements[rnd_class].x = rnd.x; //sets a new cluster center location
+			chromosomes[i].elements[rnd_class].y = rnd.y;
+
 		}
-
-		rnd_class = rand() % no_regions; //randomly choose a class
-		curr_label = -1;
-
-		while (curr_label != rnd_class) { //do this while the rnd_class is not equal to the current label
-			rndx = rand() % height;
-			rndy = rand() % width;
-
-			curr_label = classes[rndx][rndy]; //picks a random pixel label 
-		}
-
-		chromosomes[i + no_chromosomes][rnd_class].x = rndx; //sets a new cluster center location
-		chromosomes[i + no_chromosomes][rnd_class].y = rndy;
-
-		//}
 	}
 }
 
